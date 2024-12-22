@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Регистрация</title>
+</head>
+<body>
+  <div class="login-container">
+    <form id="loginForm" method="POST" action="/register">
+      <h2>Регистрация</h2>
+      <label for="username">E-mail</label>
+      <input type="text" name="username" id="username" required>
+      <div id="emailError"></div>
+      <label for="password">Пароль</label>
+      <input type="password" name="password" id="password" required>
+      <div id="passwordError"></div>
+      <div class="actions">
+        <button type="submit">Зарегистрироваться</button>
+        <a href="/login">Войти</a>
+      </div>
+    </form>
+  </div>
+  <div class="tomainpage">
+    <button id="tomainpage" onclick="main()">на главную страницу</button>
+  </div>
+</body>
+<script>
+    const form = document.getElementById('loginForm');
+    const emailInput = document.getElementById('username');
+    const passwordInput = document.getElementById('password');
+    const emailError = document.getElementById('emailError');
+    const passwordError = document.getElementById('passwordError');
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    form.addEventListener('submit', (event) => {
+      let isValid = true;
+
+      emailError.textContent = '';
+      passwordError.textContent = '';
+
+      if (!emailRegex.test(emailInput.value)) {
+        emailError.textContent = 'Введите корректный email.';
+        isValid = false;
+      }
+
+      if (passwordInput.value.length < 8) {
+        passwordError.textContent = 'Пароль должен быть не менее 8 символов.';
+        isValid = false;
+      } else if (!/[A-Z]/.test(passwordInput.value)) {
+        passwordError.textContent = 'Пароль должен содержать хотя бы одну заглавную букву.';
+        isValid = false;
+      } else if (!/[0-9]/.test(passwordInput.value)) {
+        passwordError.textContent = 'Пароль должен содержать хотя бы одну цифру.';
+        isValid = false;
+      } else if (!/[!@#$%^&*]/.test(passwordInput.value)) {
+        passwordError.textContent = 'Пароль должен содержать хотя бы один специальный символ (!@#$%^&*).';
+        isValid = false;
+      }
+
+      if (!isValid) {
+        event.preventDefault();
+      }
+    });
+
+    const main = function() {
+      window.location.href = '/';
+    }
+</script>
+</html>
