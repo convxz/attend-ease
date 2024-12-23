@@ -6,26 +6,35 @@ const LocalStrategy = require('passport-local').Strategy;
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const path = require('path');
+const { Pool } = require('pg');
 
-// Подключение к MongoDB
-mongoose.connect('mongodb://localhost:27017/auth-app', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+
+
+const { Pool } = require('pg');
+
+// Создаем подключение к PostgreSQL
+const pool = new Pool({
+  user: 'myuser',           // Имя пользователя PostgreSQL
+  host: 'localhost',        // Хост
+  database: 'mydatabase',   // Имя базы данных
+  password: 'mypassword',   // Пароль
+  port: 5432,               // Порт (по умолчанию 5432)
 });
 
-const db = mongoose.connection;
-db.on('error', console.error.bind(console, 'Ошибка подключения к MongoDB:'));
-db.once('open', () => {
-  console.log('Подключение к MongoDB установлено.');
-});
+// Пример создания таблицы для пользователей (выполните один раз в консоли PostgreSQL)
+const createUserTable = async () => {
+  const query = `
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username VARCHAR(255) UNIQUE NOT NULL,
+      passwordHash VARCHAR(255) NOT NULL
+    );
+  `;
+  await pool.query(query);
+};
 
-// Схема пользователя
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  passwordHash: { type: String, required: true },
-});
-
-const User = mongoose.model('User', userSchema);
+// Вызовите createUserTable один раз, чтобы создать таблицу в базе данных.
+createUserTable();
 
 // Настройка приложения
 const app = express();
@@ -49,12 +58,16 @@ app.use(passport.session());
 passport.use(
   new LocalStrategy(async (username, password, done) => {
     try {
-      const user = await User.findOne({ username: username });
+      // Ищем пользователя в базе данных PostgreSQL
+      const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+      const user = result.rows[0];
+
       if (!user) {
         return done(null, false, { message: 'Неверное имя пользователя.' });
       }
 
-      const isMatch = await bcrypt.compare(password, user.passwordHash);
+      // Сравниваем пароли
+      const isMatch = await bcrypt.compare(password, user.passwordhash);
       if (isMatch) {
         return done(null, user);
       } else {
@@ -66,18 +79,21 @@ passport.use(
   })
 );
 
+
 passport.serializeUser((user, done) => {
   done(null, user.id);
 });
 
 passport.deserializeUser(async (id, done) => {
   try {
-    const user = await User.findById(id);
+    const result = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+    const user = result.rows[0];
     done(null, user);
   } catch (err) {
     done(err);
   }
-}); 
+});
+
 
 // Маршруты
 app.get('/', (req, res) => {
@@ -97,31 +113,29 @@ app.post(
   })
 );
 
-// Рендеринг формы регистрации
-app.get('/register', (req, res) => {
-  res.render('register'); // Рендерим register.ejs
-});
 
+// Рендеринг формы регистрации
 app.post('/register', async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
-    const existingUser = await User.findOne({ username: username });
-    if (existingUser) {
+    // Проверяем, существует ли уже пользователь с таким именем
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (result.rows.length > 0) {
       res.render('register', { message: 'Пользователь с таким именем уже существует.' });
       return;
     }
 
+    // Хешируем пароль
     const passwordHash = await bcrypt.hash(password, 10);
-    const newUser = new User({ username, passwordHash });
 
-    await newUser.save();
+    // Сохраняем нового пользователя
+    await pool.query('INSERT INTO users (username, passwordhash) VALUES ($1, $2)', [username, passwordHash]);
 
-    // После сохранения пользователя авторизуем его
+    // Автоматически авторизуем пользователя после регистрации
+    const newUser = { username, passwordHash };
     req.login(newUser, (err) => {
-      if (err) {
-        return next(err);
-      }
+      if (err) return next(err);
       res.redirect('/dashboard');
     });
   } catch (err) {
@@ -129,6 +143,7 @@ app.post('/register', async (req, res, next) => {
     res.send('Ошибка регистрации.');
   }
 });
+
 
 
 app.get('/dashboard', (req, res) => {
@@ -147,6 +162,7 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
   });
 });
+
 
 // Запуск сервера
 app.listen(PORT, () => {
